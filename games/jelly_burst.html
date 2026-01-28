@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jelly Burst - Match 4 Edition</title>
+    <style>
+        :root {
+            --bg-body: #fdfbf7;
+            --bg-game: #e3f2fd;
+            --shadow-light: rgba(255, 255, 255, 0.8);
+            --shadow-dark: rgba(0, 0, 0, 0.1);
+            --gem-size: 65px;
+            --grid-gap: 8px;
+            --board-padding: 15px;
+        }
+
+        body {
+            background: radial-gradient(circle at center, #fff1eb, #ace0f9);
+            font-family: 'Varela Round', 'Arial Rounded MT Bold', sans-serif;
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            user-select: none;
+            overflow: hidden;
+        }
+
+        h1 {
+            color: #ff6b6b;
+            text-shadow: 2px 2px 0px white, 4px 4px 0px rgba(0,0,0,0.1);
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            letter-spacing: 2px;
+        }
+
+        #stats-bar {
+            background: white;
+            padding: 10px 30px;
+            border-radius: 50px;
+            box-shadow: 0 10px 25px rgba(100, 149, 237, 0.2);
+            display: flex;
+            gap: 40px;
+            margin-bottom: 20px;
+            font-size: 1.2rem;
+            color: #555;
+            font-weight: 800;
+        }
+
+        .stat-value {
+            color: #4facfe;
+        }
+
+        #game-container {
+            position: relative;
+            background: white;
+            padding: var(--board-padding);
+            border-radius: 20px;
+            box-shadow: 
+                0 20px 50px rgba(0,0,0,0.1),
+                inset 0 0 0 8px #eef2f3;
+        }
+
+        #grid {
+            width: calc(8 * (var(--gem-size) + var(--grid-gap)) - var(--grid-gap));
+            height: calc(8 * (var(--gem-size) + var(--grid-gap)) - var(--grid-gap));
+            position: relative;
+        }
+
+        .gem {
+            width: var(--gem-size);
+            height: var(--gem-size);
+            position: absolute;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: transform 0.2s, filter 0.2s;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 2.5rem;
+            z-index: 10;
+            
+            /* The "Juicy" Look */
+            background: white;
+            box-shadow: 
+                inset 0 -5px 10px rgba(0,0,0,0.1),
+                0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        /* Hover Effect */
+        .gem:hover {
+            transform: scale(1.05);
+            filter: brightness(1.1);
+        }
+
+        /* Selected State */
+        .gem.selected {
+            animation: pulse 1s infinite;
+            box-shadow: 0 0 0 4px #ff6b6b;
+            z-index: 20;
+        }
+
+        /* Special Gem (Created by Match 4) */
+        .gem.special::after {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            border: 3px dashed #fff;
+            animation: spin 3s linear infinite;
+            pointer-events: none;
+        }
+        
+        .gem.special {
+            background: linear-gradient(135deg, #fff, #ffeaa7);
+            border: 2px solid gold;
+        }
+
+        /* Animations */
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @keyframes pop {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.4); opacity: 0.8; }
+            100% { transform: scale(0); opacity: 0; }
+        }
+
+        .gem.popping {
+            animation: pop 0.3s forwards ease-out;
+        }
+
+        /* Particle Effects */
+        .particle {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            pointer-events: none;
+            background: var(--color);
+            z-index: 30;
+        }
+
+        /* Mobile Adjustments */
+        @media (max-width: 650px) {
+            :root { --gem-size: 40px; --grid-gap: 4px; }
+            h1 { font-size: 1.8rem; }
+        }
+
+        button {
+            margin-top: 25px;
+            background: linear-gradient(to right, #4facfe 0%, #00f2fe 100%);
+            border: none;
+            padding: 15px 40px;
+            border-radius: 30px;
+            color: white;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 5px 15px rgba(79, 172, 254, 0.4);
+            transition: transform 0.1s;
+        }
+        button:active { transform: scale(0.95); }
+
+    </style>
+</head>
+<body>
+
+    <h1>Jelly Burst</h1>
+
+    <div id="stats-bar">
+        <div>Score: <span id="score" class="stat-value">0</span></div>
+        <div>Moves: <span id="moves" class="stat-value">25</span></div>
+    </div>
+
+    <div id="game-container">
+        <div id="grid"></div>
+    </div>
+
+    <button onclick="restartGame()">New Game</button>
+
+    <script>
+        // --- Configuration ---
+        const rows = 8;
+        const cols = 8;
+        // Using emoji for visuals, but treating them as types
+        const gemTypes = ['🍎', '🍇', '🍊', '🥥', '🥝', '🫐'];
+        const colors = {
+            '🍎': '#ff6b6b', '🍇': '#a29bfe', '🍊': '#fdcb6e', 
+            '🥥': '#dfe6e9', '🥝': '#55efc4', '🫐': '#74b9ff'
+        };
+        
+        // --- State ---
+        let grid = []; // 2D Array
+        let score = 0;
+        let moves = 25;
+        let selectedGem = null;
+        let isProcessing = false;
+
+        const gridEl = document.getElementById('grid');
+        const scoreEl = document.getElementById('score');
+        const movesEl = document.getElementById('moves');
+
+        // Get CSS variables for math
+        const gemSize = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--gem-size'));
+        const gap = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--grid-gap'));
+
+        // --- Audio Context (Optional placeholders) ---
+        // Ideally, you'd add Audio objects here. keeping it silent but visual for this file.
+
+        function restartGame() {
+            score = 0;
+            moves = 25;
+            updateUI();
+            isProcessing = true;
+            gridEl.innerHTML = '';
+            grid = [];
+
+            // Initialize Grid Logic
+            for (let r = 0; r < rows; r++) {
+                let row = [];
+                for (let c = 0; c < cols; c++) {
+                    row.push(null);
+                }
+                grid.push(row);
+            }
+
+            fillBoard();
+            // Allow initial animations to settle
+            setTimeout(() => { isProcessing = false; }, 500);
+        }
+
+        function createGemElement(r, c, type) {
+            const el = document.createElement('div');
+            el.classList.add('gem');
+            el.innerText = type;
+            el.dataset.r = r;
+            el.dataset.c = c;
+            
+            // Set position
+            el.style.top = getPos(r) + 'px';
+            el.style.left = getPos(c) + 'px';
+            
+            // Click Event
+            el.addEventListener('click', handleGemClick);
+            
+            gridEl.appendChild(el);
+            return {
+                type: type,
+                el: el,
+                r: r, 
+                c: c,
+                isSpecial: false, // Match 4 bomb
+                toDelete: false
+            };
+        }
+
+        function getPos(index) {
+            return index * (gemSize + gap);
+        }
+
+        // --- Core Logic ---
+
+        function fillBoard() {
+            // Fill empty slots (nulls)
+            for (let c = 0; c < cols; c++) {
+                for (let r = 0; r < rows; r++) { // Fill top to bottom logic for initial
+                    if (grid[r][c] === null) {
+                        let type;
+                        // Simple prevention of initial matches
+                        do {
+                            type = gemTypes[Math.floor(Math.random() * gemTypes.length)];
+                        } while (
+                            (r >= 2 && grid[r-1][c] && grid[r-1][c].type === type && grid[r-2][c] && grid[r-2][c].type === type) ||
+                            (c >= 2 && grid[r][c-1] && grid[r][c-1].type === type && grid[r][c-2] && grid[r][c-2].type === type)
+                        );
+                        
+                        grid[r][c] = createGemElement(r, c, type);
+                    }
+                }
+            }
+        }
+
+        function handleGemClick(e) {
+            if (isProcessing || moves <= 0) return;
+            const clickedGemObj = getGemObj(e.target);
+
+            if (!selectedGem) {
+                // Select first
+                selectedGem = clickedGemObj;
+                selectedGem.el.classList.add('selected');
+            } else {
+                // Same gem? Deselect
+                if (selectedGem === clickedGemObj) {
+                    selectedGem.el.classList.remove('selected');
+                    selectedGem = null;
+                    return;
+                }
+
+                // Check Adjacency
+                const rDiff = Math.abs(selectedGem.r - clickedGemObj.r);
+                const cDiff = Math.abs(selectedGem.c - clickedGemObj.c);
+
+                if (rDiff + cDiff === 1) {
+                    // Valid swap attempt
+                    swapGems(selectedGem, clickedGemObj);
+                } else {
+                    // Invalid, switch selection
+                    selectedGem.el.classList.remove('selected');
+                    selectedGem = clickedGemObj;
+                    selectedGem.el.classList.add('selected');
+                }
+            }
+        }
+
+        function getGemObj(el) {
+            const r = parseInt(el.dataset.r);
+            const c = parseInt(el.dataset.c);
+            return grid[r][c];
+        }
+
+        async function swapGems(gem1, gem2) {
+            isProcessing = true;
+            gem1.el.classList.remove('selected');
+            selectedGem = null;
+
+            // Visual Move
+            await animateSwap(gem1, gem2);
+
+            // Logic Swap
+            const tempType = gem1.type;
+            const tempSpecial = gem1.isSpecial;
+            
+            gem1.type = gem2.type;
+            gem1.isSpecial = gem2.isSpecial;
+            gem1.el.innerText = gem2.type;
+            if(gem1.isSpecial) gem1.el.classList.add('special'); else gem1.el.classList.remove('special');
+
+            gem2.type = tempType;
+            gem2.isSpecial = tempSpecial;
+            gem2.el.innerText = tempType;
+            if(gem2.isSpecial) gem2.el.classList.add('special'); else gem2.el.classList.remove('special');
+
+            // Check Matches
+            const matches = findMatches();
+
+            if (matches.length > 0) {
+                moves--;
+                updateUI();
+                await processMatches(matches);
+            } else {
+                // Invalid move, swap back
+                await animateSwap(gem1, gem2);
+                
+                // Revert Logic
+                const t = gem1.type;
+                const s = gem1.isSpecial;
+                gem1.type = gem2.type;
+                gem1.isSpecial = gem2.isSpecial;
+                gem1.el.innerText = gem2.type;
+                if(gem1.isSpecial) gem1.el.classList.add('special'); else gem1.el.classList.remove('special');
+
+                gem2.type = t;
+                gem2.isSpecial = s;
+                gem2.el.innerText = t;
+                if(gem2.isSpecial) gem2.el.classList.add('special'); else gem2.el.classList.remove('special');
+                
+                isProcessing = false;
+            }
+        }
+
+        function animateSwap(g1, g2) {
+            return new Promise(resolve => {
+                const g1El = g1.el;
+                const g2El = g2.el;
+                
+                // Get current visual coordinates
+                const x1 = g1El.style.left;
+                const y1 = g1El.style.top;
+                const x2 = g2El.style.left;
+                const y2 = g2El.style.top;
+
+                g1El.style.left = x2;
+                g1El.style.top = y2;
+                g2El.style.left = x1;
+                g2El.style.top = y1;
+
+                setTimeout(() => {
+                    // Reset DOM positions to match logical grid index (handled by css transitions)
+                    // Actually, we swapped Content, not Elements in the array logic
+                    // So we must visually snap back, because we swapped innerText
+                    g1El.style.transition = 'none';
+                    g2El.style.transition = 'none';
+                    g1El.style.left = x1;
+                    g1El.style.top = y1;
+                    g2El.style.left = x2;
+                    g2El.style.top = y2;
+                    
+                    setTimeout(() => {
+                        g1El.style.transition = '';
+                        g2El.style.transition = '';
+                        resolve();
+                    }, 50);
+                }, 200);
+            });
+        }
+
+        function findMatches() {
+            let matchedSet = new Set();
+            
+            // Horizontal
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols - 2; c++) {
+                    let type = grid[r][c].type;
+                    let matchLen = 1;
+                    while (c + matchLen < cols && grid[r][c + matchLen].type === type) {
+                        matchLen++;
+                    }
+                    if (matchLen >= 3) {
+                        for (let k = 0; k < matchLen; k++) matchedSet.add(grid[r][c + k]);
+                    }
+                }
+            }
+
+            // Vertical
+            for (let c = 0; c < cols; c++) {
+                for (let r = 0; r < rows - 2; r++) {
+                    let type = grid[r][c].type;
+                    let matchLen = 1;
+                    while (r + matchLen < rows && grid[r + matchLen][c].type === type) {
+                        matchLen++;
+                    }
+                    if (matchLen >= 3) {
+                        for (let k = 0; k < matchLen; k++) matchedSet.add(grid[r + k][c]);
+                    }
+                }
+            }
+
+            return Array.from(matchedSet);
+        }
+
+        // --- The "Juice" logic (Special Gems, Particles, Gravity) ---
+
+        async function processMatches(matches) {
+            // Check for Match-4 Special Creation
+            // Basic logic: if a row/col match length > 3, we create a bomb.
+            // Simplified: Determine grouping.
+            
+            // 1. Mark for Deletion
+            matches.forEach(m => m.toDelete = true);
+
+            // 2. Check for Explosions (If a special gem is in the match list)
+            let explosionQueue = [...matches];
+            while(explosionQueue.length > 0) {
+                let current = explosionQueue.pop();
+                if(current.isSpecial) {
+                    // EXPLODE ROW
+                    let r = current.r;
+                    for(let c=0; c<cols; c++) {
+                        let target = grid[r][c];
+                        if(!target.toDelete) {
+                            target.toDelete = true;
+                            matches.push(target);
+                            explosionQueue.push(target); // Cascade
+                        }
+                    }
+                }
+            }
+
+            // 3. Logic for Creating NEW Special Gems
+            // We need to group matches to see if 4+ exist in a line.
+            // Simplified approach: If we removed > 3 gems of same type in this pass...
+            let typeCounts = {};
+            matches.forEach(m => {
+                if(!typeCounts[m.type]) typeCounts[m.type] = [];
+                typeCounts[m.type].push(m);
+            });
+
+            let newSpecials = [];
+            for (let t in typeCounts) {
+                if(typeCounts[t].length >= 4) {
+                    // Convert the last matched item of this type into a Special
+                    // Ideally it should be the one the user moved, but random is okay for this scope
+                    let target = typeCounts[t][0]; // Pick one
+                    target.toDelete = false; // SAVE IT
+                    target.becomeSpecial = true; 
+                    newSpecials.push(target);
+                }
+            }
+
+            // 4. Animate Pop
+            matches.forEach(m => {
+                if(m.toDelete) {
+                    m.el.classList.add('popping');
+                    spawnParticles(m.el, colors[m.type]);
+                    score += 10;
+                }
+            });
+            scoreEl.innerText = score;
+
+            await new Promise(r => setTimeout(r, 300));
+
+            // 5. Remove from DOM and Data
+            matches.forEach(m => {
+                if(m.toDelete) {
+                    m.el.remove();
+                    grid[m.r][m.c] = null;
+                } else if (m.becomeSpecial) {
+                    // Transform!
+                    m.isSpecial = true;
+                    m.el.classList.add('special');
+                    // Reset animations
+                    m.el.classList.remove('popping'); 
+                }
+            });
+
+            // 6. Gravity (Fall Down)
+            await applyGravity();
+
+            // 7. Refill Top
+            await refillBoard();
+
+            // 8. Recursive Check (Chain Reactions)
+            let newMatches = findMatches();
+            if (newMatches.length > 0) {
+                await new Promise(r => setTimeout(r, 300));
+                await processMatches(newMatches);
+            } else {
+                isProcessing = false;
+                if(moves === 0) alert("Game Over! Score: " + score);
+            }
+        }
+
+        async function applyGravity() {
+            // Move existing gems down
+            let movesHappened = false;
+            
+            for (let c = 0; c < cols; c++) {
+                for (let r = rows - 1; r >= 0; r--) {
+                    if (grid[r][c] === null) {
+                        // Find nearest gem above
+                        for (let k = r - 1; k >= 0; k--) {
+                            if (grid[k][c] !== null) {
+                                // Move k to r
+                                grid[r][c] = grid[k][c];
+                                grid[k][c] = null;
+                                
+                                // Update Object Data
+                                grid[r][c].r = r;
+                                grid[r][c].el.dataset.r = r;
+                                
+                                // Visual Move
+                                grid[r][c].el.style.top = getPos(r) + 'px';
+                                movesHappened = true;
+                                break; 
+                            }
+                        }
+                    }
+                }
+            }
+            if(movesHappened) await new Promise(r => setTimeout(r, 300));
+        }
+
+        async function refillBoard() {
+            for (let c = 0; c < cols; c++) {
+                for (let r = 0; r < rows; r++) {
+                    if (grid[r][c] === null) {
+                        // Spawn new
+                        const type = gemTypes[Math.floor(Math.random() * gemTypes.length)];
+                        const gemObj = createGemElement(r, c, type);
+                        grid[r][c] = gemObj;
+                        
+                        // Start slightly above
+                        gemObj.el.style.top = (getPos(r) - 50) + 'px'; 
+                        gemObj.el.style.opacity = '0';
+                        
+                        // Animate in
+                        requestAnimationFrame(() => {
+                            gemObj.el.style.transition = 'top 0.3s ease-out, opacity 0.2s';
+                            gemObj.el.style.top = getPos(r) + 'px';
+                            gemObj.el.style.opacity = '1';
+                        });
+                    }
+                }
+            }
+            await new Promise(r => setTimeout(r, 300));
+        }
+
+        // --- Visual FX ---
+
+        function spawnParticles(element, color) {
+            const rect = element.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+
+            for (let i = 0; i < 8; i++) {
+                const p = document.createElement('div');
+                p.classList.add('particle');
+                p.style.backgroundColor = color;
+                p.style.left = centerX + 'px';
+                p.style.top = centerY + 'px';
+                document.body.appendChild(p);
+
+                const angle = Math.random() * Math.PI * 2;
+                const velocity = Math.random() * 60 + 20;
+                const tx = Math.cos(angle) * velocity;
+                const ty = Math.sin(angle) * velocity;
+
+                p.animate([
+                    { transform: 'translate(-50%, -50%) scale(1)', opacity: 1 },
+                    { transform: `translate(calc(-50% + ${tx}px), calc(-50% + ${ty}px)) scale(0)`, opacity: 0 }
+                ], {
+                    duration: 500,
+                    easing: 'ease-out'
+                }).onfinish = () => p.remove();
+            }
+        }
+
+        function updateUI() {
+            scoreEl.innerText = score;
+            movesEl.innerText = moves;
+        }
+
+        // Start
+        restartGame();
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chess: Timer & Highlights (Fixed)</title>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+
+    <style>
+        :root {
+            --bg-color: #2c2f33;
+            --card-bg: #23272a;
+            --text-color: #ffffff;
+            --accent-color: #7289da;
+            --board-border: #40444b;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        .main-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            background-color: var(--card-bg);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+        }
+
+        /* --- Timer Styling --- */
+        .timer-container {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            max-width: 400px;
+            margin-bottom: 5px;
+        }
+
+        .timer {
+            background-color: #333;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 1.5rem;
+            font-weight: bold;
+            font-family: monospace;
+            border: 2px solid transparent;
+            opacity: 0.6;
+        }
+
+        .timer.active {
+            border-color: var(--accent-color);
+            background-color: #40444b;
+            opacity: 1;
+            box-shadow: 0 0 10px rgba(114, 137, 218, 0.3);
+        }
+
+        /* --- Board & Status --- */
+        #myBoard {
+            width: 400px;
+            user-select: none;
+        }
+
+        .status-panel {
+            width: 100%;
+            text-align: center;
+            font-weight: bold;
+            color: #ccc;
+            min-height: 1.2em;
+        }
+
+        /* --- Controls --- */
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        button {
+            background-color: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background 0.2s;
+        }
+
+        button:hover { background-color: #5b6eae; }
+
+        /* --- Move Highlighting Classes --- */
+        .highlight-move {
+            box-shadow: inset 0 0 3px 3px yellow;
+        }
+        .highlight-capture {
+            box-shadow: inset 0 0 3px 3px red;
+        }
+
+        @media (max-width: 500px) {
+            #myBoard { width: 320px; }
+            .timer-container { max-width: 320px; }
+            .timer { padding: 5px 10px; font-size: 1.2rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="main-container">
+        <div class="timer-container">
+            <div id="timer-w" class="timer active">10:00</div>
+            <div id="timer-b" class="timer">10:00</div>
+        </div>
+
+        <div id="myBoard"></div>
+
+        <div class="status-panel">
+            <span id="status">White to move</span>
+        </div>
+
+        <div class="controls">
+            <button id="startBtn">Reset Game</button>
+            <button id="flipBtn">Flip Board</button>
+        </div>
+    </div>
+
+    <script>
+        // --- Configuration ---
+        const GAME_TIME_MINUTES = 10;
+        
+        // --- State Variables ---
+        var board = null;
+        var game = new Chess();
+        var $status = $('#status');
+        var whiteTime = GAME_TIME_MINUTES * 60;
+        var blackTime = GAME_TIME_MINUTES * 60;
+        var timerInterval = null;
+        var gameActive = true; // CHANGED: Game starts active immediately
+
+        // --- Timer Logic ---
+        function formatTime(seconds) {
+            const min = Math.floor(seconds / 60);
+            const sec = seconds % 60;
+            return `${min}:${sec < 10 ? '0' : ''}${sec}`;
+        }
+
+        function updateTimerUI() {
+            $('#timer-w').text(formatTime(whiteTime));
+            $('#timer-b').text(formatTime(blackTime));
+
+            // Highlight active timer
+            $('.timer').removeClass('active');
+            if (game.turn() === 'w') $('#timer-w').addClass('active');
+            else $('#timer-b').addClass('active');
+        }
+
+        function startTimer() {
+            if (timerInterval) clearInterval(timerInterval);
+            gameActive = true;
+            
+            timerInterval = setInterval(() => {
+                if (!gameActive) return;
+
+                if (game.turn() === 'w') {
+                    whiteTime--;
+                    if (whiteTime <= 0) endGame("Black wins on time");
+                } else {
+                    blackTime--;
+                    if (blackTime <= 0) endGame("White wins on time");
+                }
+                updateTimerUI();
+            }, 1000);
+        }
+
+        function stopTimer() {
+            clearInterval(timerInterval);
+            gameActive = false;
+        }
+
+        function endGame(message) {
+            stopTimer();
+            $status.text(message);
+        }
+
+        // --- Move Highlighting Logic ---
+        function removeHighlights() {
+            $('#myBoard .square-55d63').removeClass('highlight-move highlight-capture');
+        }
+
+        function onMouseoverSquare(square, piece) {
+            // Do not highlight if game is over
+            if (game.game_over() || !gameActive) return;
+
+            // Get list of possible moves for this square
+            var moves = game.moves({
+                square: square,
+                verbose: true
+            });
+
+            if (moves.length === 0) return;
+
+            for (var i = 0; i < moves.length; i++) {
+                var cssClass = 'highlight-move';
+                if (moves[i].flags.includes('c') || moves[i].flags.includes('e')) {
+                    cssClass = 'highlight-capture';
+                }
+                $('#myBoard .square-' + moves[i].to).addClass(cssClass);
+            }
+        }
+
+        function onMouseoutSquare(square, piece) {
+            removeHighlights();
+        }
+
+        // --- Game Logic ---
+        function onDragStart(source, piece) {
+            // CHANGED: Removed the !gameActive check here so you can move immediately
+            if (game.game_over()) return false;
+
+            // Only pick up pieces for the side to move
+            if ((game.turn() === 'w' && piece.search(/^b/) !== -1) ||
+                (game.turn() === 'b' && piece.search(/^w/) !== -1)) {
+                return false;
+            }
+        }
+
+        function onDrop(source, target) {
+            removeHighlights();
+
+            var move = game.move({
+                from: source,
+                to: target,
+                promotion: 'q' 
+            });
+
+            if (move === null) return 'snapback';
+
+            updateStatus();
+        }
+
+        function onSnapEnd() {
+            board.position(game.fen());
+        }
+
+        function updateStatus() {
+            var status = '';
+            var moveColor = (game.turn() === 'b') ? 'Black' : 'White';
+
+            if (game.in_checkmate()) {
+                status = 'Game over, ' + moveColor + ' is in checkmate.';
+                endGame(status); // Stop timer immediately
+            } else if (game.in_draw()) {
+                status = 'Game over, drawn position';
+                endGame(status);
+            } else {
+                status = moveColor + ' to move';
+                if (game.in_check()) {
+                    status += ', ' + moveColor + ' is in check';
+                }
+            }
+
+            $status.text(status);
+            updateTimerUI();
+        }
+
+        // --- Initialization ---
+        var config = {
+            draggable: true,
+            position: 'start',
+            onDragStart: onDragStart,
+            onDrop: onDrop,
+            onSnapEnd: onSnapEnd,
+            onMouseoutSquare: onMouseoutSquare,
+            onMouseoverSquare: onMouseoverSquare,
+            pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png'
+        };
+
+        board = Chessboard('myBoard', config);
+
+        // --- Controls ---
+        $('#startBtn').on('click', function () {
+            game.reset();
+            board.start();
+            whiteTime = GAME_TIME_MINUTES * 60;
+            blackTime = GAME_TIME_MINUTES * 60;
+            updateTimerUI();
+            startTimer();
+            updateStatus();
+        });
+
+        $('#flipBtn').on('click', board.flip);
+
+        // Start everything immediately
+        updateTimerUI();
+        startTimer();
+        updateStatus();
+    </script>
+</body>
+</html>
