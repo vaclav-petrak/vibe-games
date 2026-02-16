@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <title>Neon Derby: Steel Shield Edition</title>
+    <style>
+        body { margin: 0; background: #050505; color: #00f2ff; font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; overflow: hidden; }
+        canvas { border: 2px solid #00f2ff; box-shadow: 0 0 25px #00f2ff; background: #000; display: none; }
+        #menu, #game-over { text-align: center; z-index: 10; }
+        #game-over { display: none; position: absolute; background: rgba(0,0,0,0.9); padding: 50px; border: 3px solid #ff00ff; box-shadow: 0 0 40px #ff00ff; }
+        .selection-container { display: flex; gap: 40px; margin-top: 20px; }
+        .player-box { border: 2px solid #333; padding: 20px; border-radius: 10px; width: 320px; background: #111; }
+        .active-p1 { border-color: #00f2ff; box-shadow: 0 0 15px #00f2ff; }
+        .active-p2 { border-color: #ff00ff; box-shadow: 0 0 15px #ff00ff; }
+        .hp-ui { position: absolute; top: 20px; width: 90%; display: none; justify-content: space-between; z-index: 5; }
+        .hp-bar-container { width: 300px; height: 25px; background: #222; border: 1px solid #fff; position: relative; }
+        .hp-bar-fill { height: 100%; transition: width 0.3s; }
+        .ability-label { font-size: 14px; color: #aaa; margin-top: 8px; font-weight: bold; letter-spacing: 1px; }
+        .controls-ui { position: absolute; bottom: 20px; width: 90%; display: none; justify-content: space-between; z-index: 5; font-size: 12px; }
+        .controls-box { background: rgba(0,0,0,0.7); padding: 15px; border-radius: 8px; border: 2px solid; }
+        .controls-p1 { border-color: #00f2ff; color: #00f2ff; }
+        .controls-p2 { border-color: #ff00ff; color: #ff00ff; text-align: right; }
+        select, button { background: #000; color: #00f2ff; border: 2px solid #00f2ff; padding: 10px; cursor: pointer; text-transform: uppercase; font-weight: bold; }
+        button { font-size: 1.5em; padding: 15px 40px; margin-top: 25px; transition: 0.2s; }
+        button:hover { background: #00f2ff; color: #000; box-shadow: 0 0 20px #00f2ff; }
+        h1 { font-size: 4em; text-shadow: 0 0 20px #00f2ff; margin: 0; letter-spacing: 5px; }
+    </style>
+</head>
+<body>
+
+    <div class="hp-ui" id="hp-ui">
+        <div>
+            <div>P1: MODRÝ</div>
+            <div class="hp-bar-container"><div id="p1-bar" class="hp-bar-fill" style="background: #00f2ff; width: 100%;"></div></div>
+            <div id="p1-ability-ui" class="ability-label">SCHOPNOST: ...</div>
+        </div>
+        <div>
+            <div style="text-align: right;">P2: RŮŽOVÝ</div>
+            <div class="hp-bar-container"><div id="p2-bar" class="hp-bar-fill" style="background: #ff00ff; width: 100%;"></div></div>
+            <div id="p2-ability-ui" class="ability-label" style="text-align: right;">SCHOPNOST: ...</div>
+        </div>
+    </div>
+
+    <div class="controls-ui" id="controls-ui">
+        <div class="controls-box controls-p1">
+            <div><strong>HRÁČ 1 OVLÁDÁNÍ:</strong></div>
+            <div>Pohyb: W A S D</div>
+            <div id="p1-shoot-control">Střelba: Q</div>
+            <div>Schopnost: E</div>
+        </div>
+        <div class="controls-box controls-p2">
+            <div><strong>HRÁČ 2 OVLÁDÁNÍ:</strong></div>
+            <div>Pohyb: ← ↑ → ↓</div>
+            <div id="p2-shoot-control">Střelba: R-Shift</div>
+            <div>Schopnost: Enter</div>
+        </div>
+    </div>
+
+    <div id="menu">
+        <h1>NEON DERBY</h1>
+        <div class="selection-container">
+            <div class="player-box active-p1">
+                <h2>HRÁČ 1 (WASD)</h2>
+                <select id="p1-select">
+                    <option value="sport">NEON SPORT (Nitro - E)</option>
+                    <option value="tank" selected>TANK (SuperStřela - E)</option>
+                    <option value="caravan">CARAVAN (Léčení - E)</option>
+                    <option value="bus">AUTOBUS (Pancéřový zátah - E)</option>
+                </select>
+                <p style="font-size: 0.8em; color: #555;">Střelba (jen tank): Q</p>
+            </div>
+            <div class="player-box active-p2">
+                <h2>HRÁČ 2 (ŠIPKY)</h2>
+                <select id="p2-select">
+                    <option value="sport" selected>NEON SPORT (Nitro - Enter)</option>
+                    <option value="tank">TANK (SuperStřela - Enter)</option>
+                    <option value="caravan">CARAVAN (Léčení - Enter)</option>
+                    <option value="bus">AUTOBUS (Pancéřový zátah - Enter)</option>
+                </select>
+                <p style="font-size: 0.8em; color: #555;">Střelba (jen tank): R-Shift</p>
+            </div>
+        </div>
+        <button onclick="startGame()">BOJOVAT</button>
+    </div>
+
+    <div id="game-over">
+        <div id="winner-msg" style="font-size: 3em; color: #fff; margin-bottom: 20px;"></div>
+        <button onclick="location.reload()">ZPĚT DO MENU</button>
+    </div>
+
+    <canvas id="gameCanvas" width="1000" height="650"></canvas>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+const CAR_TYPES = {
+    sport:   { hp: 80,  speed: 4.4, turn: 5.2, sizeW: 20, sizeH: 12, color: '#00f2ff', mass: 1,   ability: 'NITRO' },
+    tank:    { hp: 130, speed: 2.6, turn: 3.2, sizeW: 25, sizeH: 18, color: '#ff00ff', mass: 1.6, ability: 'SUPER STŘELA', canShoot: true },
+    caravan: { hp: 210, speed: 1.7, turn: 2.0, sizeW: 35, sizeH: 16, color: '#00ff00', mass: 2.2, ability: 'OPRAVA' },
+    bus:     { hp: 190, speed: 1.9, turn: 2.1, sizeW: 45, sizeH: 22, color: '#ffff00', mass: 2.7, ability: 'ZÁTAH' }
+};
+
+let players = [];
+let bullets = [];
+let keys = {};
+let gameActive = false;
+
+window.onkeydown = (e) => {
+    const key = e.key.toLowerCase();
+    keys[key] = true;
+};
+
+window.onkeyup = (e) => {
+    const key = e.key.toLowerCase();
+    keys[key] = false;
+};
+
+function startGame() {
+    const p1Type = document.getElementById('p1-select').value;
+    const p2Type = document.getElementById('p2-select').value;
+
+    players = [
+        { 
+            id: 1, x: 200, y: 325, angle: 0, speed: 0, 
+            ...CAR_TYPES[p1Type], maxHp: CAR_TYPES[p1Type].hp, hp: CAR_TYPES[p1Type].hp,
+            abilityReady: true, abilityCooldown: 0, lastFire: 0, isShielded: false,
+            controls: { up: 'w', left: 'a', down: 's', right: 'd', fire: 'q', special: 'e' }
+        },
+        { 
+            id: 2, x: 800, y: 325, angle: 180, speed: 0, 
+            ...CAR_TYPES[p2Type], maxHp: CAR_TYPES[p2Type].hp, hp: CAR_TYPES[p2Type].hp,
+            abilityReady: true, abilityCooldown: 0, lastFire: 0, isShielded: false,
+            controls: { up: 'arrowup', left: 'arrowleft', down: 'arrowdown', right: 'arrowright', fire: 'shift', special: 'enter' }
+        }
+    ];
+
+    // Update controls display based on selected vehicles
+    document.getElementById('p1-shoot-control').style.display = CAR_TYPES[p1Type].canShoot ? 'block' : 'none';
+    document.getElementById('p2-shoot-control').style.display = CAR_TYPES[p2Type].canShoot ? 'block' : 'none';
+
+    document.getElementById('menu').style.display = 'none';
+    document.getElementById('hp-ui').style.display = 'flex';
+    document.getElementById('controls-ui').style.display = 'flex';
+    canvas.style.display = 'block';
+    gameActive = true;
+    animate();
+}
+
+function useAbility(p, idx) {
+    if (!p.abilityReady || p.hp <= 0) return;
+
+    if (p.ability === 'NITRO') p.speed = 13;
+    else if (p.ability === 'SUPER STŘELA') {
+        bullets.push({ x: p.x, y: p.y, vx: Math.cos(p.angle * Math.PI/180)*14, vy: Math.sin(p.angle * Math.PI/180)*14, owner: idx, super: true });
+    }
+    else if (p.ability === 'OPRAVA') p.hp = Math.min(p.maxHp, p.hp + 60);
+    else if (p.ability === 'ZÁTAH') {
+        p.isShielded = true;
+        let originalMass = p.mass;
+        p.mass = 8.0; 
+        setTimeout(() => {
+            p.isShielded = false;
+            p.mass = originalMass;
+        }, 3000);
+    }
+
+    p.abilityReady = false;
+    p.abilityCooldown = 500; 
+}
+
+function update() {
+    if (!gameActive) return;
+
+    players.forEach((p, idx) => {
+        if (p.hp <= 0) return;
+
+        if (keys[p.controls.up]) p.speed += 0.25;
+        if (keys[p.controls.down]) p.speed -= 0.25;
+        if (keys[p.controls.left]) p.angle -= p.turn;
+        if (keys[p.controls.right]) p.angle += p.turn;
+
+        if (keys[p.controls.fire] && p.canShoot && Date.now() - p.lastFire > 500) {
+            bullets.push({ x: p.x, y: p.y, vx: Math.cos(p.angle * Math.PI/180)*10, vy: Math.sin(p.angle * Math.PI/180)*10, owner: idx, super: false });
+            p.lastFire = Date.now();
+        }
+
+        if (keys[p.controls.special]) useAbility(p, idx);
+
+        p.speed *= 0.96;
+        p.x += Math.cos(p.angle * Math.PI / 180) * p.speed;
+        p.y += Math.sin(p.angle * Math.PI / 180) * p.speed;
+
+        if (p.x < 0) p.x = canvas.width; if (p.x > canvas.width) p.x = 0;
+        if (p.y < 0) p.y = canvas.height; if (p.y > canvas.height) p.y = 0;
+
+        if (p.abilityCooldown > 0) p.abilityCooldown--;
+        else p.abilityReady = true;
+
+        document.getElementById(`p${idx+1}-ability-ui`).innerText = p.abilityReady ? `PŘIPRAVENO: ${p.ability}` : `DOBÍJENÍ: ${Math.ceil(p.abilityCooldown/60)}s`;
+    });
+
+    // KOLIZE MEZI AUTY
+    let dx = players[0].x - players[1].x;
+    let dy = players[0].y - players[1].y;
+    let dist = Math.hypot(dx, dy);
+    let minDist = (players[0].sizeW + players[1].sizeW) * 0.9;
+
+    if (dist < minDist) {
+        let impact = Math.abs(players[0].speed) + Math.abs(players[1].speed);
+        if (impact > 0.4) {
+            // Damage výpočet (Shielded hráč nebere damage)
+            let d0 = players[0].isShielded ? 0 : impact * players[1].mass * 2.5;
+            let d1 = players[1].isShielded ? 0 : impact * players[0].mass * 2.5;
+            
+            players[0].hp -= d0;
+            players[1].hp -= d1;
+
+            let angle = Math.atan2(dy, dx);
+            players[0].speed *= -1.2;
+            players[1].speed *= -1.2;
+            players[0].x += Math.cos(angle) * 15;
+            players[0].y += Math.sin(angle) * 15;
+            players[1].x -= Math.cos(angle) * 15;
+            players[1].y -= Math.sin(angle) * 15;
+        }
+    }
+
+    // STŘELY
+    for (let i = bullets.length - 1; i >= 0; i--) {
+        let b = bullets[i];
+        b.x += b.vx; b.y += b.vy;
+        players.forEach((p, pIdx) => {
+            if (b.owner !== pIdx && Math.hypot(p.x - b.x, p.y - b.y) < p.sizeW + 10) {
+                if (!p.isShielded) p.hp -= b.super ? 50 : 18;
+                bullets.splice(i, 1);
+            }
+        });
+        if(b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height) bullets.splice(i, 1);
+    }
+
+    // UI UPDATE A KONEC
+    players.forEach((p, i) => {
+        document.getElementById(`p${i+1}-bar`).style.width = Math.max(0, (p.hp/p.maxHp)*100) + "%";
+    });
+    
+    // Check for winner after updating all HP bars
+    if (players[0].hp <= 0 || players[1].hp <= 0) {
+        gameActive = false;
+        document.getElementById('game-over').style.display = 'block';
+        if (players[0].hp <= 0 && players[1].hp <= 0) {
+            document.getElementById('winner-msg').innerText = `REMÍZA!`;
+        } else if (players[0].hp <= 0) {
+            document.getElementById('winner-msg').innerText = `VÍTĚZÍ HRÁČ 2`;
+        } else {
+            document.getElementById('winner-msg').innerText = `VÍTĚZÍ HRÁČ 1`;
+        }
+    }
+}
+
+function draw() {
+    ctx.fillStyle = '#050505';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Mřížka
+    ctx.strokeStyle = '#111';
+    for(let i=0; i<canvas.width; i+=50) ctx.strokeRect(i, 0, 1, canvas.height);
+    for(let i=0; i<canvas.height; i+=50) ctx.strokeRect(0, i, canvas.width, 1);
+
+    players.forEach(p => {
+        if (p.hp <= 0) return;
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.angle * Math.PI / 180);
+        
+        // Vizuál pro Zátah (Shield)
+        if (p.isShielded) {
+            ctx.strokeStyle = '#fff';
+            ctx.shadowColor = '#fff';
+            ctx.shadowBlur = 30;
+            ctx.lineWidth = 6;
+        } else {
+            ctx.strokeStyle = p.color;
+            ctx.shadowColor = p.color;
+            ctx.shadowBlur = 15;
+            ctx.lineWidth = 3;
+        }
+        
+        ctx.strokeRect(-p.sizeW, -p.sizeH, p.sizeW*2, p.sizeH*2);
+        
+        if(p.sizeW > 40) { // Okýnka autobusu
+            ctx.fillStyle = p.isShielded ? '#fff' : p.color;
+            for(let x = -35; x < 30; x+=12) ctx.fillRect(x, -p.sizeH+2, 8, 4);
+        }
+        if(p.canShoot) ctx.strokeRect(p.sizeW, -3, 15, 6);
+        ctx.restore();
+    });
+
+    bullets.forEach(b => {
+        ctx.fillStyle = b.super ? "#ff0000" : "#ffffff";
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = ctx.fillStyle;
+        ctx.beginPath(); ctx.arc(b.x, b.y, b.super ? 10 : 4, 0, Math.PI*2); ctx.fill();
+    });
+}
+
+function animate() {
+    update();
+    draw();
+    if (gameActive) requestAnimationFrame(animate);
+}
+</script>
+</body>
+</html>

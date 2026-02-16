@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <title>Pavoučí lov</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #222; font-family: sans-serif; }
+        canvas { display: block; background: #1a1a1a; }
+        #ui { position: absolute; top: 10px; left: 10px; color: white; font-size: 20px; pointer-events: none; }
+    </style>
+</head>
+<body>
+    <div id="ui">Hráč 1 (W/S): <span id="s1">0</span> | Hráč 2 (↑/↓): <span id="s2">0</span></div>
+    <canvas id="gameCanvas"></canvas>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const s1Display = document.getElementById('s1');
+const s2Display = document.getElementById('s2');
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+let score1 = 0;
+let score2 = 0;
+
+const keys = {};
+window.addEventListener('keydown', e => keys[e.code] = true);
+window.addEventListener('keyup', e => keys[e.code] = false);
+
+class Spider {
+    constructor(x, color, upKey, downKey) {
+        this.x = x;
+        this.y = canvas.height / 2;
+        this.size = 30;
+        this.speed = 7;
+        this.color = color;
+        this.upKey = upKey;
+        this.downKey = downKey;
+    }
+
+    draw() {
+        // Vlákno
+        ctx.strokeStyle = '#555';
+        ctx.beginPath();
+        ctx.moveTo(this.x, 0);
+        ctx.lineTo(this.x, this.y);
+        ctx.stroke();
+
+        // Tělo pavouka
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.ellipse(this.x, this.y, 15, 20, 0, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Nožičky (8 nohou)
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = 3;
+        for (let i = 0; i < 4; i++) {
+            let angle = 0.5 + i * 0.5;
+            // Levá strana
+            ctx.beginPath();
+            ctx.moveTo(this.x, this.y);
+            ctx.lineTo(this.x - 25, this.y - 20 + i * 15);
+            ctx.stroke();
+            // Pravá strana
+            ctx.beginPath();
+            ctx.moveTo(this.x, this.y);
+            ctx.lineTo(this.x + 25, this.y - 20 + i * 15);
+            ctx.stroke();
+        }
+    }
+
+    update() {
+        if (keys[this.upKey] && this.y > 50) this.y -= this.speed;
+        if (keys[this.downKey] && this.y < canvas.height - 50) this.y += this.speed;
+    }
+}
+
+class Fly {
+    constructor() {
+        this.reset();
+    }
+
+    reset() {
+        this.x = Math.random() > 0.5 ? -50 : canvas.width + 50;
+        this.y = Math.random() * canvas.height;
+        this.speedX = (Math.random() * 3 + 2) * (this.x < 0 ? 1 : -1);
+        this.speedY = (Math.random() - 0.5) * 4;
+        this.size = 8;
+        this.wingTimer = 0;
+    }
+
+    draw() {
+        this.wingTimer += 0.5;
+        // Křídla
+        ctx.fillStyle = "rgba(200, 200, 255, 0.6)";
+        ctx.beginPath();
+        ctx.ellipse(this.x - 5, this.y - 5, 8, 4 + Math.sin(this.wingTimer)*3, 0.5, 0, Math.PI * 2);
+        ctx.ellipse(this.x + 5, this.y - 5, 8, 4 + Math.sin(this.wingTimer)*3, -0.5, 0, Math.PI * 2);
+        ctx.fill();
+        // Tělo mouchy
+        ctx.fillStyle = "black";
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    update() {
+        this.x += this.speedX;
+        this.y += this.speedY;
+        if (this.x < -100 || this.x > canvas.width + 100) this.reset();
+    }
+}
+
+const p1 = new Spider(canvas.width * 0.3, '#8b4513', 'KeyW', 'KeyS');
+const p2 = new Spider(canvas.width * 0.7, '#444', 'ArrowUp', 'ArrowDown');
+const flies = Array.from({ length: 8 }, () => new Fly());
+
+function checkCollision(spider, fly) {
+    const dx = spider.x - fly.x;
+    const dy = spider.y - fly.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    return distance < spider.size;
+}
+
+function loop() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Vykreslení pavučiny na pozadí (dekorace)
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 1;
+    for(let i=0; i<canvas.width; i+=100) {
+        ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(canvas.width/2, canvas.height/2); ctx.stroke();
+    }
+
+    [p1, p2].forEach(p => {
+        p.update();
+        p.draw();
+    });
+
+    flies.forEach(fly => {
+        fly.update();
+        fly.draw();
+
+        if (checkCollision(p1, fly)) {
+            score1++;
+            s1Display.innerText = score1;
+            fly.reset();
+        }
+        if (checkCollision(p2, fly)) {
+            score2++;
+            s2Display.innerText = score2;
+            fly.reset();
+        }
+    });
+
+    requestAnimationFrame(loop);
+}
+
+loop();
+</script>
+</body>
+</html>

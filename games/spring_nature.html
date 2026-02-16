@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<title>Jarní příroda</title>
+<style>
+  body { 
+    margin: 0; 
+    background: #000; 
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+  }
+  canvas { 
+    display: block;
+    box-shadow: 0 0 20px rgba(255,255,255,0.3);
+  }
+</style>
+</head>
+<body>
+<canvas id="scene" width="800" height="500"></canvas>
+<script>
+const canvas = document.getElementById("scene");
+const ctx = canvas.getContext("2d");
+
+// Draw static background
+function drawBackground() {
+  // Obloha
+  ctx.fillStyle = "#87CEEB";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  // Slunce
+  ctx.beginPath();
+  ctx.arc(700, 80, 50, 0, Math.PI * 2);
+  ctx.fillStyle = "yellow";
+  ctx.fill();
+  
+  // Tráva
+  ctx.fillStyle = "#3CB043";
+  ctx.fillRect(0, 350, canvas.width, 150);
+  
+  // Strom - kmen
+  ctx.fillStyle = "#8B4513";
+  ctx.fillRect(150, 250, 30, 100);
+  
+  // Strom - koruna
+  ctx.beginPath();
+  ctx.arc(165, 230, 60, 0, Math.PI * 2);
+  ctx.fillStyle = "green";
+  ctx.fill();
+  
+  // Mraky
+  drawCloud(200, 100);
+  drawCloud(400, 70);
+  
+  // Květiny
+  drawFlower(300, 380);
+  drawFlower(350, 400);
+  drawFlower(500, 390);
+  drawFlower(600, 410);
+}
+
+function drawCloud(x, y) {
+  ctx.fillStyle = "white";
+  ctx.beginPath();
+  ctx.arc(x, y, 20, 0, Math.PI * 2);
+  ctx.arc(x + 25, y, 25, 0, Math.PI * 2);
+  ctx.arc(x + 50, y, 20, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawFlower(x, y) {
+  for (let i = 0; i < 6; i++) {
+    ctx.beginPath();
+    ctx.arc(
+      x + Math.cos(i * Math.PI / 3) * 10,
+      y + Math.sin(i * Math.PI / 3) * 10,
+      5,
+      0,
+      Math.PI * 2
+    );
+    ctx.fillStyle = "pink";
+    ctx.fill();
+  }
+  ctx.beginPath();
+  ctx.arc(x, y, 6, 0, Math.PI * 2);
+  ctx.fillStyle = "yellow";
+  ctx.fill();
+}
+
+// Draw hedgehog
+function drawHedgehog(x, y, facingRight) {
+  ctx.save();
+  ctx.translate(x, y);
+  
+  // Flip if facing left
+  if (!facingRight) {
+    ctx.scale(-1, 1);
+  }
+  
+  // Body
+  ctx.fillStyle = "#8B7355";
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 20, 12, 0, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Spikes
+  ctx.fillStyle = "#5C4033";
+  for (let i = 0; i < 8; i++) {
+    ctx.beginPath();
+    ctx.moveTo(-15 + i * 4, -8);
+    ctx.lineTo(-13 + i * 4, -14);
+    ctx.lineTo(-11 + i * 4, -8);
+    ctx.fill();
+  }
+  
+  // Head
+  ctx.fillStyle = "#A0826D";
+  ctx.beginPath();
+  ctx.arc(18, 0, 8, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Nose
+  ctx.fillStyle = "#000";
+  ctx.beginPath();
+  ctx.arc(24, 0, 2, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Eye
+  ctx.fillStyle = "#000";
+  ctx.beginPath();
+  ctx.arc(20, -3, 1.5, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Legs
+  ctx.strokeStyle = "#5C4033";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(-5, 10);
+  ctx.lineTo(-5, 15);
+  ctx.moveTo(5, 10);
+  ctx.lineTo(5, 15);
+  ctx.stroke();
+  
+  ctx.restore();
+}
+
+// Draw chicken
+function drawChicken(x, y, legOffset, facingRight) {
+  ctx.save();
+  ctx.translate(x, y);
+  
+  // Flip if facing left
+  if (!facingRight) {
+    ctx.scale(-1, 1);
+  }
+  
+  // Body
+  ctx.fillStyle = "#FFD700";
+  ctx.beginPath();
+  ctx.ellipse(0, -5, 16, 20, 0, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Wing
+  ctx.fillStyle = "#FFC700";
+  ctx.beginPath();
+  ctx.ellipse(-8, -5, 9, 13, -0.3, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Head
+  ctx.fillStyle = "#FFD700";
+  ctx.beginPath();
+  ctx.arc(10, -20, 11, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Comb (3 rounded bumps)
+  ctx.fillStyle = "#FF6347";
+  ctx.beginPath();
+  ctx.arc(6, -28, 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(10, -30, 4.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(14, -28, 4, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Beak
+  ctx.fillStyle = "#FF8C00";
+  ctx.beginPath();
+  ctx.moveTo(18, -20);
+  ctx.lineTo(24, -19);
+  ctx.lineTo(18, -17);
+  ctx.closePath();
+  ctx.fill();
+  
+  // Eye (bigger and cuter)
+  ctx.fillStyle = "#000";
+  ctx.beginPath();
+  ctx.arc(14, -21, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Eye shine (makes it cuter)
+  ctx.fillStyle = "#FFF";
+  ctx.beginPath();
+  ctx.arc(15, -22, 1, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Legs with walking animation
+  ctx.strokeStyle = "#FF8C00";
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(-5, 14);
+  ctx.lineTo(-5 + legOffset, 22);
+  ctx.moveTo(5, 14);
+  ctx.lineTo(5 - legOffset, 22);
+  ctx.stroke();
+  
+  // Feet
+  ctx.strokeStyle = "#FF8C00";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(-5 + legOffset - 3, 22);
+  ctx.lineTo(-5 + legOffset + 3, 22);
+  ctx.moveTo(5 - legOffset - 3, 22);
+  ctx.lineTo(5 - legOffset + 3, 22);
+  ctx.stroke();
+  
+  ctx.restore();
+}
+
+// Animal management
+class Animal {
+  constructor(type, startX, y, speed, facingRight) {
+    this.type = type;
+    this.x = startX;
+    this.y = y;
+    this.speed = speed;
+    this.facingRight = facingRight;
+    this.legPhase = 0;
+  }
+  
+  update() {
+    this.x += this.speed;
+    this.legPhase += 0.15;
+  }
+  
+  draw() {
+    if (this.type === 'hedgehog') {
+      drawHedgehog(this.x, this.y, this.facingRight);
+    } else if (this.type === 'chicken') {
+      const legOffset = Math.sin(this.legPhase) * 3;
+      drawChicken(this.x, this.y, legOffset, this.facingRight);
+    }
+  }
+  
+  isOffScreen() {
+    if (this.facingRight) {
+      return this.x > canvas.width + 50;
+    } else {
+      return this.x < -50;
+    }
+  }
+}
+
+let animals = [];
+let nextAnimalTime = 0;
+
+function hasAnimalOfType(type) {
+  return animals.some(animal => animal.type === type);
+}
+
+function spawnAnimals() {
+  const now = Date.now();
+  if (now > nextAnimalTime) {
+    // Grass field is from y=350 to y=500
+    // Animals should be between y=400 and y=470 (leaving room for their height)
+    const grassMinY = 400;
+    const grassMaxY = 470;
+    
+    // Random decision: spawn 0, 1, or 2 animals (but max 1 of each type)
+    const count = Math.random() < 0.3 ? 0 : (Math.random() < 0.7 ? 1 : 2);
+    
+    // Available types that aren't already on screen
+    let availableTypes = [];
+    if (!hasAnimalOfType('hedgehog')) availableTypes.push('hedgehog');
+    if (!hasAnimalOfType('chicken')) availableTypes.push('chicken');
+    
+    // Shuffle available types
+    availableTypes.sort(() => Math.random() - 0.5);
+    
+    for (let i = 0; i < Math.min(count, availableTypes.length); i++) {
+      const type = availableTypes[i];
+      const y = grassMinY + Math.random() * (grassMaxY - grassMinY);
+      const speed = 0.5 + Math.random() * 0.8;
+      const facingRight = Math.random() < 0.5;
+      const startX = facingRight ? -50 : canvas.width + 50;
+      const finalSpeed = facingRight ? speed : -speed;
+      
+      animals.push(new Animal(type, startX, y, finalSpeed, facingRight));
+    }
+    
+    // Next spawn in 3-8 seconds
+    nextAnimalTime = now + (3000 + Math.random() * 5000);
+  }
+}
+
+function animate() {
+  // Draw background
+  drawBackground();
+  
+  // Spawn new animals randomly
+  spawnAnimals();
+  
+  // Update and draw animals
+  animals.forEach(animal => {
+    animal.update();
+    animal.draw();
+  });
+  
+  // Remove off-screen animals
+  animals = animals.filter(animal => !animal.isOffScreen());
+  
+  requestAnimationFrame(animate);
+}
+
+// Start animation
+animate();
+</script>
+</body>
+</html>

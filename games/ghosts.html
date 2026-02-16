@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<title>👻 Duchové – 7 Levelů</title>
+<style>
+body { margin:0; overflow:hidden; background:black; }
+canvas { display:block; margin:auto; background:#140022; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+canvas.width = 1200;
+canvas.height = 500;
+
+const gravity = 0.6;
+const splitDistance = 500;
+let level = 1;
+const maxLevels = 7;
+let mapWidth;
+let showWin = false;
+let winTimer = 0;
+
+const keys = {};
+document.addEventListener("keydown", e => keys[e.key] = true);
+document.addEventListener("keyup", e => keys[e.key] = false);
+
+class Player {
+    constructor(x,y,color,controls){
+        this.startX=x;
+        this.startY=y;
+        this.x=x;
+        this.y=y;
+        this.width=30;
+        this.height=30;
+        this.dx=0;
+        this.dy=0;
+        this.speed=4;
+        this.jump=-12;
+        this.onGround=false;
+        this.color=color;
+        this.controls=controls;
+    }
+
+    reset(){
+        this.x=this.startX;
+        this.y=this.startY;
+        this.dy=0;
+    }
+
+    update(platforms){
+        if(keys[this.controls.left]) this.dx=-this.speed;
+        else if(keys[this.controls.right]) this.dx=this.speed;
+        else this.dx=0;
+
+        if(keys[this.controls.jump] && this.onGround){
+            this.dy=this.jump;
+        }
+
+        this.dy+=gravity;
+        this.x+=this.dx;
+        this.y+=this.dy;
+
+        this.onGround=false;
+
+        platforms.forEach(p=>{
+            if(this.x < p.x+p.width &&
+               this.x+this.width > p.x &&
+               this.y+this.height > p.y &&
+               this.y+this.height < p.y+p.height+10 &&
+               this.dy>=0){
+                this.y=p.y-this.height;
+                this.dy=0;
+                this.onGround=true;
+            }
+        });
+
+        if(this.y>canvas.height) this.reset();
+    }
+
+    draw(cameraX){
+        ctx.fillStyle=this.color;
+        ctx.beginPath();
+        ctx.arc(this.x-cameraX+15,this.y+15,15,0,Math.PI*2);
+        ctx.fill();
+        ctx.fillRect(this.x-cameraX,this.y+15,30,15);
+
+        ctx.fillStyle="white";
+        ctx.fillRect(this.x-cameraX+8,this.y+10,5,5);
+        ctx.fillRect(this.x-cameraX+17,this.y+10,5,5);
+    }
+}
+
+class Platform{
+    constructor(x,y,w,h){
+        this.x=x; this.y=y; this.width=w; this.height=h;
+    }
+    draw(cameraX){
+        ctx.fillStyle="#442266";
+        ctx.fillRect(this.x-cameraX,this.y,this.width,this.height);
+    }
+}
+
+let platforms=[];
+let goal;
+
+function generateLevel(){
+    platforms=[];
+    mapWidth = 3000 + level*600;
+
+    for(let i=0;i<mapWidth;i+=300){
+        platforms.push(new Platform(i,450,200,50));
+        if(i>200)
+            platforms.push(
+                new Platform(
+                    i+100,
+                    380-Math.random()*(80+level*15),
+                    120,
+                    20
+                )
+            );
+    }
+
+    goal = {
+        x: mapWidth-100,
+        y: 380,
+        width: 40,
+        height: 70
+    };
+
+    players.forEach(p=>p.reset());
+}
+
+const players=[
+    new Player(100,380,"#99ffff",{left:"a",right:"d",jump:"w"}),
+    new Player(160,380,"#ff99ff",{left:"ArrowLeft",right:"ArrowRight",jump:"ArrowUp"})
+];
+
+function reachedGoal(p){
+    return p.x+p.width > goal.x;
+}
+
+function drawGoal(cameraX){
+    ctx.fillStyle="gold";
+    ctx.fillRect(goal.x-cameraX,goal.y,goal.width,goal.height);
+}
+
+function drawScene(){
+    let mid = (players[0].x + players[1].x)/2;
+    let cameraX = mid - canvas.width/2;
+    if(cameraX<0) cameraX=0;
+    if(cameraX>mapWidth-canvas.width)
+        cameraX=mapWidth-canvas.width;
+
+    ctx.fillStyle="#140022";
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+
+    platforms.forEach(p=>p.draw(cameraX));
+    drawGoal(cameraX);
+
+    players.forEach(p=>{
+        p.update(platforms);
+        p.draw(cameraX);
+    });
+}
+
+function gameLoop(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    if(showWin){
+        ctx.fillStyle="white";
+        ctx.font="40px Arial";
+        ctx.textAlign="center";
+
+        if(level <= maxLevels)
+            ctx.fillText("🏆 Vyhráli jste level!", canvas.width/2, canvas.height/2);
+        else
+            ctx.fillText("👑 Vyhráli jste celou hru!", canvas.width/2, canvas.height/2);
+
+        winTimer++;
+        if(winTimer > 120){
+            showWin=false;
+            winTimer=0;
+
+            if(level > maxLevels){
+                level = 1;
+            }
+
+            generateLevel();
+        }
+
+    } else {
+        drawScene();
+
+        if(reachedGoal(players[0]) && reachedGoal(players[1])){
+            level++;
+            showWin = true;
+        }
+
+        ctx.fillStyle="white";
+        ctx.font="20px Arial";
+        ctx.fillText("Level: " + level + " / " + maxLevels, 20, 30);
+    }
+
+    requestAnimationFrame(gameLoop);
+}
+
+generateLevel();
+gameLoop();
+</script>
+</body>
+</html>

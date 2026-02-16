@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Milk Run 4.0: Traffic Rush 🥛🏎️</title>
+    <style>
+        body { margin:0; overflow:hidden; background:#000; font-family: 'Segoe UI', sans-serif; }
+        
+        /* HUD Styling */
+        #ui {
+            position:absolute; top:20px; left:20px; color:#fff; 
+            background: linear-gradient(135deg, rgba(0,0,0,0.9), rgba(20,20,20,0.8)); 
+            padding: 20px; border-radius: 12px; width: 220px;
+            border-left: 4px solid #ff0044;
+            pointer-events: none; z-index: 100;
+            box-shadow: 0 0 15px rgba(255, 0, 68, 0.2);
+        }
+
+        /* Health Bar */
+        #health-container {
+            width: 100%; height: 10px; background: #333; margin-top: 5px; margin-bottom: 15px;
+            border-radius: 5px; overflow: hidden;
+        }
+        #health-bar {
+            width: 100%; height: 100%; background: #00ff44; 
+            transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* Status Effects */
+        #status-effect {
+            position: absolute; top: 100px; left: 50%; transform: translateX(-50%);
+            font-size: 24px; font-weight: bold; color: #00ffff;
+            text-shadow: 0 0 10px #00ffff; display: none;
+        }
+
+        #speedo-container {
+            position:absolute; bottom:30px; right:30px; text-align:right;
+            color: #ff0044; font-weight: bold; text-shadow: 0 0 10px #ff0044;
+        }
+
+        /* Countdown Overlay */
+        #countdown-overlay {
+            position:absolute; top:0; left:0; width:100%; height:100%;
+            background: rgba(0,0,0,0.85); display:none; flex-direction:column;
+            align-items:center; justify-content:center; z-index: 250;
+            backdrop-filter: blur(5px);
+        }
+        #countdown-overlay h2 { 
+            color: #00ff44; font-size: 40px; margin: 10px; 
+            text-shadow: 0 0 20px #00ff44;
+        }
+        #countdown-number { 
+            color: #ff0044; font-size: 150px; margin: 0; font-weight: bold;
+            text-shadow: 0 0 30px #ff0044;
+            animation: pulse 0.8s ease-in-out;
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+        }
+
+        #overlay {
+            position:absolute; top:0; left:0; width:100%; height:100%;
+            background: rgba(0,0,0,0.85); display:none; flex-direction:column;
+            align-items:center; justify-content:center; z-index: 200;
+            backdrop-filter: blur(5px);
+        }
+        #overlay h1 { color: #ff0044; font-size: 80px; margin: 0; font-style: italic; letter-spacing: -2px; }
+        #restart-btn {
+            margin-top: 20px; padding: 15px 50px; font-size: 20px;
+            background: #fff; border: none; cursor: pointer; font-weight: bold;
+            border-radius: 50px; transition: 0.3s;
+            box-shadow: 0 0 20px rgba(255,255,255,0.3);
+        }
+        #restart-btn:hover { background: #ff0044; color: white; transform: scale(1.1); }
+
+        /* Victory Screen */
+        .victory-text {
+            color: #00ff44;
+            text-shadow: 0 0 20px #00ff44;
+        }
+    </style>
+</head>
+<body>
+
+<div id="ui">
+    <div style="display:flex; justify-content:space-between; font-size: 14px; opacity: 0.8;">
+        <span>INTEGRITY</span>
+        <span id="hp-text">100%</span>
+    </div>
+    <div id="health-container"><div id="health-bar"></div></div>
+
+    <div style="font-size: 14px; opacity: 0.7;">MISSION PROGRESS</div>
+    <div style="font-size: 28px;">LVL <span id="level" style="color:#ff0044">1</span>/5</div>
+    <div style="font-size: 16px; margin-top:5px;">SCORE: <span id="points">0</span></div>
+    <div style="font-size: 12px; margin-top:5px; opacity: 0.6;">DISTANCE: <span id="distance">0</span>m</div>
+</div>
+
+<div id="status-effect">SLOW MOTION ACTIVE</div>
+
+<div id="speedo-container">
+    <div style="font-size: 12px; color: white; opacity: 0.6;">VELOCITY</div>
+    <div style="font-size: 45px;"><span id="speed-val">0</span> <span style="font-size: 18px;">KM/H</span></div>
+</div>
+
+<!-- Countdown Overlay -->
+<div id="countdown-overlay">
+    <h2 id="countdown-title">LEVEL 1 STARTING</h2>
+    <div id="countdown-number">3</div>
+</div>
+
+<div id="overlay">
+    <h1 id="status-text">CRITICAL FAILURE</h1>
+    <p style="color: white; opacity: 0.6; font-size: 18px;" id="status-subtext">The chassis is destroyed.</p>
+    <button id="restart-btn" onclick="handleRestart()">REBOOT SYSTEM</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+
+<script>
+// --- SCENE SETUP ---
+let scene = new THREE.Scene();
+scene.background = new THREE.Color(0x020205);
+scene.fog = new THREE.Fog(0x020205, 20, 100);
+
+let camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
+let renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+let sun = new THREE.PointLight(0xff0044, 2, 60);
+sun.position.set(0, 10, -10);
+scene.add(sun);
+
+// --- LEVEL THEMES ---
+const LEVEL_THEMES = [
+    { 
+        name: "Neon Purple", 
+        edgeColor: 0xaa00aa, 
+        fogColor: 0x020205, 
+        sunColor: 0xff0044,
+        distanceRequired: 3000 // meters
+    },
+    { 
+        name: "Cyber Blue", 
+        edgeColor: 0x00aaff, 
+        fogColor: 0x000510, 
+        sunColor: 0x00ffff,
+        distanceRequired: 4000
+    },
+    { 
+        name: "Toxic Green", 
+        edgeColor: 0x00ff00, 
+        fogColor: 0x051000, 
+        sunColor: 0x44ff00,
+        distanceRequired: 5000
+    },
+    { 
+        name: "Solar Orange", 
+        edgeColor: 0xff8800, 
+        fogColor: 0x100500, 
+        sunColor: 0xffaa00,
+        distanceRequired: 6000
+    },
+    { 
+        name: "Crimson Red", 
+        edgeColor: 0xff0044, 
+        fogColor: 0x100005, 
+        sunColor: 0xff0066,
+        distanceRequired: 7000
+    }
+];
+
+// --- ROAD & VISIBILITY ---
+const ROAD_W = 20;
+// Main Asphalt
+let road = new THREE.Mesh(
+    new THREE.PlaneGeometry(ROAD_W, 2000), 
+    new THREE.MeshStandardMaterial({color: 0x111111, roughness: 0.2})
+);
+road.rotation.x = -Math.PI/2;
+scene.add(road);
+
+// Edge Markings (Dynamic Color)
+let leftEdge, rightEdge;
+function createEdge(xPos) {
+    let edge = new THREE.Mesh(
+        new THREE.PlaneGeometry(1.5, 2000),
+        new THREE.MeshBasicMaterial({color: 0xaa00aa})
+    );
+    edge.rotation.x = -Math.PI/2;
+    edge.position.set(xPos, 0.01, 0);
+    return edge;
+}
+leftEdge = createEdge(-(ROAD_W/2) - 0.75);
+rightEdge = createEdge((ROAD_W/2) + 0.75);
+scene.add(leftEdge);
+scene.add(rightEdge);
+
+// Dashed Lines
+let dashes = new THREE.Group();
+for(let i=0; i<60; i++) {
+    let d = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 5), new THREE.MeshBasicMaterial({color: 0xffffff}));
+    d.rotation.x = -Math.PI/2; d.position.set(0, 0.02, -i * 15);
+    dashes.add(d);
+}
+scene.add(dashes);
+
+// --- CAR CREATION FUNCTIONS ---
+function createSupercar() {
+    let car = new THREE.Group();
+    let bodyMat = new THREE.MeshStandardMaterial({color: 0xcc0000, metalness: 0.8, roughness: 0.2});
+
+    let base = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.5, 4.8), bodyMat);
+    base.position.y = 0.5;
+    car.add(base);
+
+    let cabin = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.6, 2.0), new THREE.MeshStandardMaterial({color: 0x111111}));
+    cabin.position.set(0, 1.0, -0.3);
+    car.add(cabin);
+
+    let slope = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.5, 2.2), bodyMat);
+    slope.position.set(0, 0.75, 1.1);
+    slope.rotation.x = -0.35;
+    car.add(slope);
+
+    // Brake Lights
+    let brakeMat = new THREE.MeshBasicMaterial({color: 0xff0000});
+    let l1 = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.15, 0.1), brakeMat);
+    let l2 = l1.clone();
+    l1.position.set(0.7, 0.6, 2.4);
+    l2.position.set(-0.7, 0.6, 2.4);
+    car.add(l1, l2);
+    car.userData.brakeLights = [l1, l2];
+
+    // Wheels
+    let wGeo = new THREE.CylinderGeometry(0.45, 0.45, 0.5, 16);
+    let wMat = new THREE.MeshStandardMaterial({color: 0x000000});
+    [[1.3, 0.45, 1.5], [-1.3, 0.45, 1.5], [1.3, 0.45, -1.5], [-1.3, 0.45, -1.5]].forEach(p => {
+        let w = new THREE.Mesh(wGeo, wMat);
+        w.rotation.z = Math.PI/2; w.position.set(p[0], p[1], p[2]);
+        car.add(w);
+    });
+
+    // Front Headlights
+    let headMat = new THREE.MeshBasicMaterial({color: 0xffffaa});
+    let h1 = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.2, 0.1), headMat);
+    let h2 = h1.clone();
+    h1.position.set(0.7, 0.6, -2.4);
+    h2.position.set(-0.7, 0.6, -2.4);
+    car.add(h1, h2);
+
+    return car;
+}
+
+function createTrafficCar(colorHex) {
+    let car = new THREE.Group();
+    let bodyMat = new THREE.MeshStandardMaterial({color: colorHex, metalness: 0.7, roughness: 0.3});
+
+    // Main body
+    let base = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.5, 4.5), bodyMat);
+    base.position.y = 0.5;
+    car.add(base);
+
+    // Cabin
+    let cabin = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.7, 2.2), new THREE.MeshStandardMaterial({color: 0x222222}));
+    cabin.position.set(0, 1.0, 0.2);
+    car.add(cabin);
+
+    // Hood
+    let hood = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.4, 1.8), bodyMat);
+    hood.position.set(0, 0.7, -1.3);
+    hood.rotation.x = 0.2;
+    car.add(hood);
+
+    // Wheels
+    let wGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.45, 12);
+    let wMat = new THREE.MeshStandardMaterial({color: 0x000000});
+    [[1.2, 0.4, 1.4], [-1.2, 0.4, 1.4], [1.2, 0.4, -1.4], [-1.2, 0.4, -1.4]].forEach(p => {
+        let w = new THREE.Mesh(wGeo, wMat);
+        w.rotation.z = Math.PI/2; w.position.set(p[0], p[1], p[2]);
+        car.add(w);
+    });
+
+    // Front Headlights (glowing)
+    let headMat = new THREE.MeshBasicMaterial({color: 0xffffff});
+    let h1 = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.2, 0.1), headMat);
+    let h2 = h1.clone();
+    h1.position.set(0.6, 0.6, -2.25);
+    h2.position.set(-0.6, 0.6, -2.25);
+    car.add(h1, h2);
+    car.userData.headlights = [h1, h2];
+
+    // Rear lights (red)
+    let rearMat = new THREE.MeshBasicMaterial({color: 0xff0000});
+    let r1 = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.15, 0.1), rearMat);
+    let r2 = r1.clone();
+    r1.position.set(0.7, 0.6, 2.25);
+    r2.position.set(-0.7, 0.6, 2.25);
+    car.add(r1, r2);
+
+    return car;
+}
+
+function createTrafficCone() {
+    let cone = new THREE.Group();
+    
+    // Orange cone body
+    let coneGeo = new THREE.ConeGeometry(0.4, 1.2, 8);
+    let coneMat = new THREE.MeshStandardMaterial({color: 0xff6600, metalness: 0.3, roughness: 0.7});
+    let coneMesh = new THREE.Mesh(coneGeo, coneMat);
+    coneMesh.position.y = 0.6;
+    cone.add(coneMesh);
+    
+    // White reflective stripes
+    let stripeMat = new THREE.MeshBasicMaterial({color: 0xffffff});
+    let stripe1 = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.35, 0.15, 8), stripeMat);
+    stripe1.position.y = 0.8;
+    cone.add(stripe1);
+    
+    let stripe2 = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.25, 0.15, 8), stripeMat);
+    stripe2.position.y = 0.4;
+    cone.add(stripe2);
+    
+    // Black base
+    let baseMat = new THREE.MeshStandardMaterial({color: 0x222222});
+    let base = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.1, 8), baseMat);
+    base.position.y = 0.05;
+    cone.add(base);
+    
+    return cone;
+}
+
+// --- PLAYER CAR SETUP ---
+let player = createSupercar();
+player.position.set(0, 0, 5);
+scene.add(player);
+let brakeLights = player.userData.brakeLights;
+
+// --- GAME STATE ---
+let keys = {};
+let gameActive = false;
+let level = 1, points = 0, distance = 0, health = 100;
+let carVelX = 0;
+let obstacles = []; // Now these will be moving cars and cones
+let bonuses = [];
+let particles = [];
+let spawnTimer = 0, coneTimer = 0, bonusTimer = 0;
+let shakeIntensity = 0, timeMod = 1.0;
+let slowMoTimer, flashTimer;
+
+// --- AUDIO SETUP ---
+const AudioContext = window.AudioContext || window.webkitAudioContext;
+let audioCtx;
+let engineOscillator, engineGain;
+
+function initAudio() {
+    if (!audioCtx) {
+        audioCtx = new AudioContext();
+    }
+}
+
+function startEngineSound() {
+    // Engine sound disabled
+}
+
+function updateEngineSound(speed) {
+    // Engine sound disabled
+}
+
+function stopEngineSound() {
+    // Engine sound disabled
+}
+
+function playSound(freq, duration, type = 'sine', volume = 0.15) {
+    if (!audioCtx) initAudio();
+    let osc = audioCtx.createOscillator();
+    let gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    gain.gain.setValueAtTime(volume, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + duration);
+}
+
+function playCollisionSound() {
+    playSound(100, 0.3, 'sawtooth', 0.2);
+}
+
+function playPowerUpSound(type) {
+    if (type === 'health') {
+        playSound(600, 0.2, 'sine', 0.1);
+        setTimeout(() => playSound(800, 0.2, 'sine', 0.1), 100);
+    } else {
+        playSound(400, 0.15, 'triangle', 0.08);
+        setTimeout(() => playSound(500, 0.15, 'triangle', 0.08), 80);
+        setTimeout(() => playSound(600, 0.15, 'triangle', 0.08), 160);
+    }
+}
+
+function playDodgeSound() {
+    playSound(800, 0.1, 'sine', 0.05);
+}
+
+function playGameOverSound() {
+    playSound(200, 0.5, 'sawtooth', 0.15);
+    setTimeout(() => playSound(150, 0.8, 'sawtooth', 0.15), 200);
+}
+
+function playVictorySound() {
+    [523, 659, 784, 1047].forEach((f, i) => {
+        setTimeout(() => playSound(f, 0.3, 'sine', 0.1), i * 150);
+    });
+}
+
+// --- PARTICLE EFFECTS ---
+function createSmoke() {
+    if(Math.random() > 0.7) {
+        let geo = new THREE.SphereGeometry(0.3, 8, 8);
+        let mat = new THREE.MeshBasicMaterial({color: 0x555555, transparent: true, opacity: 0.6});
+        let mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(player.position.x + (Math.random()-0.5)*2, 0.3, player.position.z + 2);
+        scene.add(mesh);
+        particles.push({mesh: mesh, vy: 0.05, life: 1.0});
+    }
+}
+
+// --- LEVEL TRANSITIONS ---
+function applyLevelTheme(lvl) {
+    let theme = LEVEL_THEMES[lvl - 1];
+    scene.fog.color.setHex(theme.fogColor);
+    scene.background.setHex(theme.fogColor);
+    leftEdge.material.color.setHex(theme.edgeColor);
+    rightEdge.material.color.setHex(theme.edgeColor);
+    sun.color.setHex(theme.sunColor);
+}
+
+function completeLevel() {
+    gameActive = false;
+    stopEngineSound();
+    playVictorySound();
+    
+    if(level >= 5) {
+        document.getElementById("status-text").textContent = "MISSION COMPLETE";
+        document.getElementById("status-text").className = "victory-text";
+        document.getElementById("status-subtext").textContent = "All deliveries completed successfully!";
+        document.getElementById("restart-btn").textContent = "RESTART MISSION";
+    } else {
+        level++;
+        distance = 0;
+        applyLevelTheme(level);
+        obstacles.forEach(o => scene.remove(o));
+        bonuses.forEach(b => scene.remove(b));
+        obstacles = [];
+        bonuses = [];
+        startCountdown(level);
+        return;
+    }
+    document.getElementById("overlay").style.display = "flex";
+}
+
+function startCountdown(lvl) {
+    let countdownOverlay = document.getElementById("countdown-overlay");
+    let countdownNumber = document.getElementById("countdown-number");
+    let countdownTitle = document.getElementById("countdown-title");
+    
+    countdownTitle.textContent = `LEVEL ${lvl} STARTING`;
+    countdownOverlay.style.display = "flex";
+    
+    let count = 3;
+    countdownNumber.textContent = count;
+    
+    let countInterval = setInterval(() => {
+        count--;
+        if(count > 0) {
+            countdownNumber.textContent = count;
+            playSound(600, 0.1, 'sine', 0.1);
+        } else {
+            clearInterval(countInterval);
+            countdownNumber.textContent = "GO!";
+            playSound(800, 0.2, 'sine', 0.15);
+            setTimeout(() => {
+                countdownOverlay.style.display = "none";
+                gameActive = true;
+                animate();
+            }, 500);
+        }
+    }, 1000);
+}
+
+// --- TRAFFIC CAR COLORS ---
+const CAR_COLORS = [
+    0x0088ff, // Blue
+    0xff8800, // Orange
+    0x00ff88, // Green
+    0xff0088, // Pink
+    0xffff00, // Yellow
+    0x8800ff, // Purple
+    0x00ffff, // Cyan
+    0xff00ff  // Magenta
+];
+
+// --- CREATE TRAFFIC CONE ---
+function createTrafficCone() {
+    let cone = new THREE.Group();
+    
+    // Orange cone body
+    let coneGeo = new THREE.ConeGeometry(0.5, 1.2, 8);
+    let coneMat = new THREE.MeshStandardMaterial({color: 0xff6600, metalness: 0.2, roughness: 0.8});
+    let coneMesh = new THREE.Mesh(coneGeo, coneMat);
+    coneMesh.position.y = 0.6;
+    cone.add(coneMesh);
+    
+    // White reflective stripes
+    let stripe1 = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.52, 0.4, 0.15, 8),
+        new THREE.MeshBasicMaterial({color: 0xffffff})
+    );
+    stripe1.position.y = 0.8;
+    cone.add(stripe1);
+    
+    let stripe2 = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.4, 0.28, 0.15, 8),
+        new THREE.MeshBasicMaterial({color: 0xffffff})
+    );
+    stripe2.position.y = 0.5;
+    cone.add(stripe2);
+    
+    // Base
+    let base = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.6, 0.6, 0.1, 8),
+        new THREE.MeshStandardMaterial({color: 0x222222})
+    );
+    base.position.y = 0.05;
+    cone.add(base);
+    
+    return cone;
+}
+
+// --- SPAWN TRAFFIC CARS AND CONES ---
+function spawnObstacle() {
+    spawnTimer++;
+    let spawnRate = Math.max(40, 80 - (level * 8));
+    if(spawnTimer < spawnRate) return;
+    spawnTimer = 0;
+
+    // 70% chance for traffic car, 30% chance for cone
+    let spawnType = Math.random();
+    
+    if(spawnType > 0.3) {
+        // Spawn traffic car
+        let color = CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)];
+        let trafficCar = createTrafficCar(color);
+        
+        // Position car in a lane
+        let lanes = [-6, -2, 2, 6];
+        let lane = lanes[Math.floor(Math.random() * lanes.length)];
+        
+        trafficCar.position.set(lane, 0, -120);
+        trafficCar.rotation.y = Math.PI; // Face towards player
+        
+        // Store movement data
+        trafficCar.userData = {
+            type: 'car',
+            damage: 25,
+            speed: 0.6 + Math.random() * 0.4,
+            lane: lane,
+            swerveTimer: 0,
+            swerveOffset: 0
+        };
+        
+        scene.add(trafficCar);
+        obstacles.push(trafficCar);
+    } else {
+        // Spawn traffic cone (static)
+        let cone = createTrafficCone();
+        
+        // Position cone randomly on road
+        let xPos = (Math.random() - 0.5) * 16;
+        cone.position.set(xPos, 0, -120);
+        
+        // Store data
+        cone.userData = {
+            type: 'cone',
+            damage: 10, // Less damage than cars
+            speed: 0 // Static obstacle
+        };
+        
+        scene.add(cone);
+        obstacles.push(cone);
+    }
+}
+
+// --- SPAWN BONUSES ---
+function spawnBonus() {
+    bonusTimer++;
+    if(bonusTimer < 200) return;
+    bonusTimer = 0;
+
+    let type = Math.random() > 0.5 ? "health" : "slow";
+    let obj, mat;
+
+    if(type === "health") {
+        mat = new THREE.MeshBasicMaterial({color: 0x00ff00});
+        obj = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), mat);
+    } else {
+        mat = new THREE.MeshBasicMaterial({color: 0x00ffff});
+        obj = new THREE.Mesh(new THREE.IcosahedronGeometry(0.7, 0), mat);
+    }
+
+    obj.position.set((Math.random()-0.5) * 16, 1.0, -120);
+    obj.userData = { type: type };
+    scene.add(obj);
+    bonuses.push(obj);
+}
+
+// --- INPUT ---
+window.addEventListener("keydown", e => keys[e.key] = true);
+window.addEventListener("keyup", e => keys[e.key] = false);
+
+// --- PHYSICS & EFFECTS ---
+function takeDamage(amount) {
+    if (!gameActive) return;
+    health -= amount;
+    shakeIntensity = 0.5; 
+    playCollisionSound();
+    
+    player.children.forEach(child => {
+        if (child.isMesh && child.material.type === "MeshStandardMaterial") {
+            child.material.emissive.setHex(0xffffff);
+        }
+    });
+
+    if(flashTimer) clearTimeout(flashTimer);
+
+    flashTimer = setTimeout(() => {
+        player.children.forEach(child => {
+            if (child.isMesh && child.material.type === "MeshStandardMaterial") {
+                child.material.emissive.setHex(0x000000);
+            }
+        });
+    }, 100);
+
+    updateHealthUI();
+    if(health <= 0) gameOver();
+}
+
+function applyBonus(type) {
+    playPowerUpSound(type);
+    if(type === "health") {
+        health = Math.min(health + 34, 100);
+        updateHealthUI();
+    } else if (type === "slow") {
+        activateSlowMo();
+    }
+}
+
+function activateSlowMo() {
+    timeMod = 0.5;
+    document.getElementById("status-effect").style.display = "block";
+    let theme = LEVEL_THEMES[level - 1];
+    scene.fog.color.setHex(0x000033);
+    
+    if(slowMoTimer) clearTimeout(slowMoTimer);
+    slowMoTimer = setTimeout(() => {
+        timeMod = 1.0;
+        document.getElementById("status-effect").style.display = "none";
+        scene.fog.color.setHex(theme.fogColor);
+    }, 5000);
+}
+
+function updateHealthUI() {
+    let bar = document.getElementById("health-bar");
+    let txt = document.getElementById("hp-text");
+    let h = Math.max(0, health);
+    bar.style.width = h + "%";
+    txt.innerText = Math.ceil(h) + "%";
+
+    if(h > 50) bar.style.background = "#00ff44";
+    else if(h > 25) bar.style.background = "#ffaa00";
+    else bar.style.background = "#ff0000";
+}
+
+// --- MAIN LOOP ---
+function animate() {
+    if(!gameActive) return;
+    requestAnimationFrame(animate);
+
+    // Car Physics
+    if(keys["ArrowLeft"]) carVelX -= 0.025;
+    if(keys["ArrowRight"]) carVelX += 0.025;
+    carVelX *= 0.88;
+    player.position.x += carVelX;
+    player.position.x = THREE.MathUtils.clamp(player.position.x, -9, 9);
+    player.rotation.y = -carVelX * 0.8;
+    player.rotation.z = -carVelX * 0.3;
+
+    // Brake Lights
+    let isBraking = !keys["ArrowLeft"] && !keys["ArrowRight"];
+    brakeLights.forEach(l => l.material.color.setHex(isBraking ? 0xff0000 : 0x330000));
+
+    // Calculate World Speed
+    let baseSpeed = 0.8 + (level * 0.15);
+    let speed = baseSpeed * timeMod;
+
+    // Update distance and score continuously
+    let distanceIncrement = speed * 1.5;
+    distance += distanceIncrement;
+    points += Math.floor(speed * 2);
+
+    // Check if level completed
+    let requiredDistance = LEVEL_THEMES[level - 1].distanceRequired;
+    if(distance >= requiredDistance) {
+        completeLevel();
+        return;
+    }
+
+    // Move Road
+    dashes.position.z += speed;
+    if(dashes.position.z > 15) dashes.position.z = 0;
+
+    spawnObstacle();
+    spawnBonus();
+
+    // Handle Traffic Cars and Cones
+    for(let i = obstacles.length-1; i >= 0; i--) {
+        let obstacle = obstacles[i];
+        
+        if(obstacle.userData.type === 'car') {
+            // Move car towards player (opposite direction)
+            let carSpeed = (speed + obstacle.userData.speed) * timeMod;
+            obstacle.position.z += carSpeed;
+            
+            // Add subtle swerving motion
+            obstacle.userData.swerveTimer += 0.02;
+            obstacle.userData.swerveOffset = Math.sin(obstacle.userData.swerveTimer) * 0.3;
+            obstacle.position.x = obstacle.userData.lane + obstacle.userData.swerveOffset;
+            
+            // Slight rotation for realism
+            obstacle.rotation.z = obstacle.userData.swerveOffset * 0.1;
+        } else if(obstacle.userData.type === 'cone') {
+            // Static cone just moves with road speed
+            obstacle.position.z += speed;
+        }
+
+        // Remove if passed player
+        if(obstacle.position.z > 20) {
+            scene.remove(obstacle);
+            obstacles.splice(i, 1);
+            points += 50;
+            playDodgeSound();
+        } 
+        // Check collision (smaller radius for cones)
+        else {
+            let collisionRadius = obstacle.userData.type === 'cone' ? 1.5 : 3.0;
+            if(player.position.distanceTo(obstacle.position) < collisionRadius) {
+                takeDamage(obstacle.userData.damage);
+                scene.remove(obstacle); 
+                obstacles.splice(i, 1);
+            }
+        }
+    }
+
+    // Handle Bonuses
+    for(let i = bonuses.length-1; i >= 0; i--) {
+        let b = bonuses[i];
+        b.rotation.y += 0.05; b.rotation.z += 0.05;
+        b.position.z += speed;
+
+        if(b.position.z > 20) {
+            scene.remove(b);
+            bonuses.splice(i, 1);
+        } else if(player.position.distanceTo(b.position) < 2.5) {
+            applyBonus(b.userData.type);
+            scene.remove(b);
+            bonuses.splice(i, 1);
+        }
+    }
+
+    // Visual Damage Effects (Smoke)
+    if(health < 70) createSmoke();
+    for(let i=particles.length-1; i>=0; i--) {
+        let p = particles[i];
+        p.mesh.position.y += p.vy;
+        p.mesh.position.z += speed * 0.5;
+        p.life -= 0.03;
+        p.mesh.material.opacity = p.life * 0.6;
+        if(p.life <= 0) {
+            scene.remove(p.mesh);
+            particles.splice(i, 1);
+        }
+    }
+
+    // Camera Logic + Shake
+    let camTargetX = player.position.x * 0.4;
+    let camTargetY = 5;
+    
+    if(shakeIntensity > 0) {
+        camTargetX += (Math.random()-0.5) * shakeIntensity;
+        camTargetY += (Math.random()-0.5) * shakeIntensity;
+        shakeIntensity *= 0.9;
+        if(shakeIntensity < 0.05) shakeIntensity = 0;
+    }
+
+    // Update UI
+    document.getElementById("level").innerText = level;
+    document.getElementById("points").innerText = points;
+    document.getElementById("distance").innerText = Math.floor(distance);
+    document.getElementById("speed-val").innerText = Math.floor(speed * 180);
+    
+    camera.position.lerp(new THREE.Vector3(camTargetX, camTargetY, 12), 0.1);
+    camera.lookAt(player.position.x, 0, -5);
+    renderer.render(scene, camera);
+}
+
+function gameOver() {
+    gameActive = false;
+    stopEngineSound();
+    playGameOverSound();
+    document.getElementById("status-text").textContent = "CRITICAL FAILURE";
+    document.getElementById("status-text").className = "";
+    document.getElementById("status-subtext").textContent = "The chassis is destroyed.";
+    document.getElementById("restart-btn").textContent = "REBOOT SYSTEM";
+    document.getElementById("overlay").style.display = "flex";
+}
+
+function handleRestart() {
+    resetGame();
+}
+
+function resetGame() {
+    stopEngineSound();
+    level = 1; points = 0; distance = 0; carVelX = 0; health = 100;
+    shakeIntensity = 0; timeMod = 1.0;
+    
+    obstacles.forEach(o => scene.remove(o));
+    bonuses.forEach(b => scene.remove(b));
+    particles.forEach(p => scene.remove(p.mesh));
+    obstacles = []; bonuses = []; particles = [];
+
+    player.children.forEach(child => {
+        if (child.isMesh && child.material.type === "MeshStandardMaterial") {
+            child.material.emissive.setHex(0x000000);
+        }
+    });
+
+    player.position.x = 0;
+    updateHealthUI();
+    
+    document.getElementById("overlay").style.display = "none";
+    document.getElementById("status-effect").style.display = "none";
+    
+    applyLevelTheme(1);
+    startCountdown(1);
+}
+
+// Resize Handler
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// Start the game with countdown
+window.addEventListener('load', () => {
+    applyLevelTheme(1);
+    startCountdown(1);
+});
+</script>
+</body>
+</html>
