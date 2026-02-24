@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <title>White Neon Tank Tetris</title>
+    <style>
+        body {
+            background: #ffffff;
+            color: #000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+        }
+        #game-container {
+            position: relative;
+            border: 3px solid #000;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+        }
+        canvas {
+            display: block;
+            background-color: #ffffff;
+        }
+        .ui {
+            position: absolute;
+            top: 10px;
+            right: -180px;
+            width: 160px;
+        }
+        h1 {
+            letter-spacing: 3px;
+            color: #000;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+        }
+        #game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.95);
+            color: #000;
+            padding: 20px;
+            border: 4px solid #000;
+            box-shadow: 0 0 50px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            display: none;
+            z-index: 10;
+            width: 80%;
+        }
+        .blink {
+            animation: blinker 1.5s linear infinite;
+        }
+        @keyframes blinker {
+            50% { opacity: 0.2; }
+        }
+    </style>
+</head>
+<body>
+
+    <h1>TANK TETRIS</h1>
+    <div id="game-container">
+        <canvas id="tetris" width="240" height="400"></canvas>
+        <div id="game-over">
+            <h2 style="font-size: 28px; margin: 0; letter-spacing: 5px; color: #ff0000;">GAME OVER</h2>
+            <p>Konečné skóre: <span id="final-score">0</span></p>
+            <p class="blink" style="color: #000; font-weight: bold; font-size: 14px;">STISKNI ↓ PRO RESTART</p>
+        </div>
+        <div class="ui">
+            <h3 style="color: #000;">SKÓRE: <span id="score">0</span></h3>
+            <p style="font-size: 12px; color: #555;">OVLÁDÁNÍ:<br>← → Pohyb<br>↑ Otočit<br>↓ Pád / Restart</p>
+        </div>
+    </div>
+
+<script>
+const canvas = document.getElementById('tetris');
+const context = canvas.getContext('2d');
+const scoreElement = document.getElementById('score');
+const gameOverScreen = document.getElementById('game-over');
+const finalScoreElement = document.getElementById('final-score');
+
+context.scale(20, 20);
+
+// Přidána červená barva pro explozi bomby (index 8)
+const colors = [
+    null,
+    '#000000', '#333333', '#555555', '#777777',
+    '#222222', '#444444', '#666666', '#ff0000'
+];
+
+let particles = [];
+
+function createExplosion(x, y, color) {
+    for (let i = 0; i < 6; i++) {
+        particles.push({
+            x: x + 0.5,
+            y: y + 0.5,
+            vx: (Math.random() - 0.5) * 0.4,
+            vy: (Math.random() - 0.5) * 0.4,
+            life: 1.0,
+            color: color || '#000000'
+        });
+    }
+}
+
+function updateParticles() {
+    for (let i = particles.length - 1; i >= 0; i--) {
+        let p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life -= 0.03;
+        if (p.life <= 0) {
+            particles.splice(i, 1);
+        }
+    }
+}
+
+function drawParticles() {
+    particles.forEach(p => {
+        context.globalAlpha = p.life;
+        context.fillStyle = p.color;
+        context.fillRect(p.x - 0.1, p.y - 0.1, 0.2, 0.2); 
+    });
+    context.globalAlpha = 1.0;
+}
+
+function drawTank(x, y, color) {
+    context.shadowBlur = 5;
+    context.shadowColor = 'rgba(0,0,0,0.3)';
+    context.strokeStyle = color;
+    context.lineWidth = 0.08;
+    context.fillStyle = color;
+
+    context.strokeRect(x + 0.15, y + 0.25, 0.7, 0.5);
+    context.fillRect(x + 0.35, y + 0.35, 0.3, 0.3);
+    
+    context.beginPath();
+    context.moveTo(x + 0.5, y + 0.35);
+    context.lineTo(x + 0.5, y + 0.1);
+    context.stroke();
+    
+    context.shadowBlur = 0;
+}
+
+// Speciální funkce pro vykreslení bomby
+function drawBomb(x, y) {
+    // Tělo bomby
+    context.fillStyle = '#111111';
+    context.beginPath();
+    context.arc(x + 0.5, y + 0.6, 0.35, 0, Math.PI * 2);
+    context.fill();
+    
+    // Knot
+    context.strokeStyle = '#555555';
+    context.lineWidth = 0.08;
+    context.beginPath();
+    context.moveTo(x + 0.5, y + 0.25);
+    context.lineTo(x + 0.6, y + 0.1);
+    context.stroke();
+    
+    // Jiskra
+    context.fillStyle = '#ffaa00';
+    context.beginPath();
+    context.arc(x + 0.6, y + 0.1, 0.1, 0, Math.PI * 2);
+    context.fill();
+}
+
+function createMatrix(w, h) {
+    const matrix = [];
+    while (h--) matrix.push(new Array(w).fill(0));
+    return matrix;
+}
+
+function createPiece(type) {
+    if (type === 'I') return [[0, 1, 0, 0], [0, 1, 0, 0], [0, 1, 0, 0], [0, 1, 0, 0]];
+    if (type === 'L') return [[0, 2, 0], [0, 2, 0], [0, 2, 2]];
+    if (type === 'J') return [[0, 3, 0], [0, 3, 0], [3, 3, 0]];
+    if (type === 'O') return [[4, 4], [4, 4]];
+    if (type === 'Z') return [[5, 5, 0], [0, 5, 5], [0, 0, 0]];
+    if (type === 'S') return [[0, 6, 6], [6, 6, 0], [0, 0, 0]];
+    if (type === 'T') return [[0, 7, 0], [7, 7, 7], [0, 0, 0]];
+}
+
+let arena = createMatrix(12, 20);
+// Player objekt nyní sleduje, jestli je zrovna ovládaný dílek bomba
+let player = { pos: {x: 0, y: 0}, matrix: null, score: 0, isBomb: false };
+let gameOver = false;
+
+// Proměnné pro načasování bomby
+let piecesSpawned = 0;
+let nextBombTurn = 10 + Math.floor(Math.random() * 11); // Náhodně mezi 10. a 20. tahem
+
+function arenaSweep() {
+    outer: for (let y = arena.length - 1; y > 0; --y) {
+        for (let x = 0; x < arena[y].length; ++x) {
+            if (arena[y][x] === 0) continue outer;
+        }
+        
+        for (let x = 0; x < arena[y].length; ++x) {
+            createExplosion(x, y, colors[arena[y][x]]);
+        }
+
+        const row = arena.splice(y, 1)[0].fill(0);
+        arena.unshift(row);
+        ++y;
+        
+        player.score += 10; 
+        updateScore();
+    }
+}
+
+function collide(arena, player) {
+    const [m, o] = [player.matrix, player.pos];
+    for (let y = 0; y < m.length; ++y) {
+        for (let x = 0; x < m[y].length; ++x) {
+            if (m[y][x] !== 0 && (arena[y + o.y] && arena[y + o.y][x + o.x]) !== 0) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+function merge(arena, player) {
+    player.matrix.forEach((row, y) => {
+        row.forEach((value, x) => {
+            if (value !== 0) {
+                arena[y + player.pos.y][x + player.pos.x] = value;
+                player.score += 1;
+            }
+        });
+    });
+    updateScore();
+}
+
+function playerReset() {
+    piecesSpawned++;
+    
+    // Zkontrolujeme, zda je čas na bombu
+    if (piecesSpawned >= nextBombTurn) {
+        player.matrix = [[8]]; // 1x1 matice reprezentující bombu
+        player.isBomb = true;
+        // Nastavíme, kdy spadne další bomba#
+        nextBombTurn = piecesSpawned + 10 + Math.floor(Math.random() * 11);
+    } else {
+        const pieces = 'TJLOSZI';
+        player.matrix = createPiece(pieces[pieces.length * Math.random() | 0]);
+        player.isBomb = false;
+    }
+    
+    player.pos.y = 0;
+    player.pos.x = (arena[0].length / 2 | 0) - (player.matrix[0].length / 2 | 0);
+    
+    if (collide(arena, player)) {
+        gameOver = true;
+        finalScoreElement.innerText = player.score;
+        gameOverScreen.style.display = 'block';
+    }
+}
+
+function resetGame() {
+    arena.forEach(row => row.fill(0));
+    player.score = 0;
+    gameOver = false;
+    particles = [];
+    piecesSpawned = 0;
+    nextBombTurn = 10 + Math.floor(Math.random() * 11);
+    gameOverScreen.style.display = 'none';
+    updateScore();
+    playerReset();
+    update();
+}
+
+function playerDrop() {
+    player.pos.y++;
+    if (collide(arena, player)) {
+        player.pos.y--; // Návrat na bezpečnou pozici těsně nad srážkou
+        
+        if (player.isBomb) {
+            // Logika exploze bomby
+            const hitX = player.pos.x;
+            const hitY = player.pos.y + 1; // Políčko přesně pod bombou
+            
+            if (hitY < arena.length && arena[hitY][hitX] !== 0) {
+                // Trefili jsme tank (blok)
+                createExplosion(hitX, hitY, colors[arena[hitY][hitX]]); // Částice zničeného tanku
+                createExplosion(hitX, hitY, '#ff0000'); // Částice exploze bomby (červené)
+                arena[hitY][hitX] = 0; // Vymažeme tank z plochy
+            } else {
+                // Trefili jsme dno hrací plochy (nic se nezničí, jen výbuch)
+                createExplosion(hitX, player.pos.y, '#ff0000');
+            }
+            // Bombu ne-mergujeme (nepřipojujeme na plochu), prostě zmizí.
+        } else {
+            // Normální dílek se připojí
+            merge(arena, player);
+        }
+        
+        playerReset();
+        arenaSweep();
+    }
+    dropCounter = 0;
+}
+
+function rotate(matrix, dir) {
+    for (let y = 0; y < matrix.length; ++y) {
+        for (let x = 0; x < y; ++x) {
+            [matrix[x][y], matrix[y][x]] = [matrix[y][x], matrix[x][y]];
+        }
+    }
+    if (dir > 0) matrix.forEach(row => row.reverse());
+    else matrix.reverse();
+}
+
+function playerRotate(dir) {
+    // Bombu nemá smysl otáčet (je to 1x1), ale volání rotate nic nerozbije.
+    const pos = player.pos.x;
+    let offset = 1;
+    rotate(player.matrix, dir);
+    while (collide(arena, player)) {
+        player.pos.x += offset;
+        offset = -(offset + (offset > 0 ? 1 : -1));
+        if (offset > player.matrix[0].length) {
+            rotate(player.matrix, -dir);
+            player.pos.x = pos;
+            return;
+        }
+    }
+}
+
+function draw() {
+    context.fillStyle = '#fff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    drawMatrix(arena, {x: 0, y: 0});
+    drawMatrix(player.matrix, player.pos);
+    drawParticles();
+}
+
+function drawMatrix(matrix, offset) {
+    matrix.forEach((row, y) => {
+        row.forEach((value, x) => {
+            if (value === 8) {
+                drawBomb(x + offset.x, y + offset.y); // Index 8 je naše nová bomba
+            } else if (value !== 0) {
+                drawTank(x + offset.x, y + offset.y, colors[value]);
+            }
+        });
+    });
+}
+
+let dropCounter = 0;
+let dropInterval = 1000;
+let lastTime = 0;
+
+function update(time = 0) {
+    if (gameOver) return;
+    const deltaTime = time - lastTime;
+    lastTime = time;
+    
+    dropCounter += deltaTime;
+    if (dropCounter > dropInterval) playerDrop();
+    
+    updateParticles();
+    draw();
+    
+    requestAnimationFrame(update);
+}
+
+function updateScore() {
+    scoreElement.innerText = player.score;
+}
+
+document.addEventListener('keydown', event => {
+    if (gameOver) {
+        if (event.keyCode === 40) resetGame();
+        return;
+    }
+    if (event.keyCode === 37) {
+        player.pos.x--;
+        if (collide(arena, player)) player.pos.x++;
+    } else if (event.keyCode === 39) {
+        player.pos.x++;
+        if (collide(arena, player)) player.pos.x--;
+    } else if (event.keyCode === 40) {
+        playerDrop();
+    } else if (event.keyCode === 38) {
+        playerRotate(1);
+    }
+});
+
+playerReset();
+update();
+</script>
+</body>
+</html>
